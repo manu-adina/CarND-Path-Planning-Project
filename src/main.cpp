@@ -55,7 +55,7 @@ int main() {
   int lane = 1;
 
   // Velocity
-  double ref_vel = 49.5;
+  double ref_vel = 0.0;
 
   h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
                &map_waypoints_dx,&map_waypoints_dy,&lane]
@@ -96,6 +96,41 @@ int main() {
           auto sensor_fusion = j[1]["sensor_fusion"];
 
           int prev_size = previous_path_x.size();
+
+          if(prev_size > 0) {
+            car_s = end_path_s;
+          }
+
+          bool too_close = false;
+
+          for(int i = 0; i < sensor_fusion.size(); i++) {
+
+            float d = sensor_fusion[i][6];
+            if(d < (2 + 4 * lane + 2) && d > (2 + 4 * lane - 2)) {
+              double vx = sensor_fusion[i][3];
+              double vy = sensor_fusion[i][4];
+              double check_speed = sqrt(vx*vx + vy*vy);
+              double check_car_s = sensor_fusion[i][5];
+
+              check_car_s += ((double)prev_size*0.02*check_speed);
+              // If a car in the future is going to be within 30m, then slow down.
+              if((check_car_s > car_s) && ((check_car_s - car_s) < 30)) {
+                //ref_vel = 29.5;
+                too_close = true;
+                if(lane > 0) {
+                  lane = 0;
+                }
+              }
+            }
+          }
+
+          if(too_close) {
+            ref_vel -= 0.224;
+          } 
+          else if(ref_vel < 49.5) {
+            ref_vel += 0.224;
+          }
+
 
           json msgJson;
 
