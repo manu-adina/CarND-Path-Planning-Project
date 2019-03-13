@@ -14,6 +14,8 @@ using nlohmann::json;
 using std::string;
 using std::vector;
 
+using namespace std;
+
 int main() {
   uWS::Hub h;
 
@@ -51,14 +53,16 @@ int main() {
     map_waypoints_dy.push_back(d_y);
   }
 
-  // Current lane
-  int lane = 1;
+  // Starting ego_car_lane of the vehicle. '1' is a middle ego_car_lane.
+  int ego_car_lane = 1;
 
   // Velocity
   double ref_vel = 0.0;
+  double speed_step = .224;
+	const double max_speed = 49.5;
 
-  h.onMessage([&ref_vel,&map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
-               &map_waypoints_dx,&map_waypoints_dy,&lane]
+  h.onMessage([&ref_vel, &speed_step, &max_speed, &map_waypoints_x,&map_waypoints_y,&map_waypoints_s,
+               &map_waypoints_dx,&map_waypoints_dy,&ego_car_lane]
               (uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
@@ -101,42 +105,75 @@ int main() {
             car_s = end_path_s;
           }
 
-          bool too_close = false;
+          /** A lot of the starting code was taken from the Udacity's video tutorial. 
+           * Source: https://youtu.be/7sI3VHFPP0w
+           * The ideas for lane changes were taken from a blog "Path planning project — Udacity’s self-driving car nanodegree"
+           * Source: https://medium.com/intro-to-artificial-intelligence/path-planning-project-udacitys-self-driving-car-nanodegree-be1f531cc4f7
+           * Source Author: Dhanoop Karunakaran
+          **/
+
+          // Prediction. 
+          bool neighbour_car_ahead = false;
+          bool neighbour_car_left = false;
+          bool neighbour_car_right = false;
 
           for(int i = 0; i < sensor_fusion.size(); i++) {
 
             float d = sensor_fusion[i][6];
-            if(d < (2 + 4 * lane + 2) && d > (2 + 4 * lane - 2)) {
-              double vx = sensor_fusion[i][3];
-              double vy = sensor_fusion[i][4];
-              double check_speed = sqrt(vx*vx + vy*vy);
-              double check_car_s = sensor_fusion[i][5];
+            
+            int neighbour_car_lane = -1;
 
-              check_car_s += ((double)prev_size*0.02*check_speed);
-              // If a car in the future is going to be within 30m, then slow down.
-              if((check_car_s > car_s) && ((check_car_s - car_s) < 30)) {
-                //ref_vel = 29.5;
-                too_close = true;
-                if(lane > 0) {
-                  lane = 0;
-                }
-              }
+            // Checking on what lane the neighbour car is.
+            if(d > 0 && d < 4) {
+              neighbour_car_lane = 0; // Left lane = 0
+            } else if(d > 4 && d < 8) {
+              neighbour_car_lane = 1; // Middle lane = 1
+            } else if(d > 8 and d < 12) {
+              neighbour_car_lane = 2; // Right lane = 2
+            }
+
+            // Neighbouring car's velocity components.
+            double vx = sensor_fusion[i][3];
+            double vy = sensor_fusion[i][4];
+            double check_speed = sqrt(vx*vx + vy*vy);
+            double neighbour_car_s = sensor_fusion[i][5];
+
+            // Predict the neighboring car's position in the future.
+            neighbour_car_s += ((double)prev_size*0.02*check_speed);
+
+            // Decide which move to execute.
+            if(neighbour_car_lane == ego_car_lane) {
+              // Neighbour car is on the same lane as ego car, and will be too close.
+              neighbour_car_ahead |= neighbour_car_s > car_s && (neighbour_car_s - car_s) < 30;										
+            } else if((neighbour_car_lane - ego_car_lane) == -1) {
+              // Neighbour car is on the left lane and check if it's within 30m
+              neighbour_car_left |= (car_s + 30) > neighbour_car_s  && (car_s - 30) < neighbour_car_s;
+            } else if((neighbour_car_lane - ego_car_lane) == 1) {
+              // Neighbour car is on the right lane, and check if it's within 30m
+              neighbour_car_right |= (car_s + 30) > neighbour_car_s  && (car_s - 30) < neighbour_car_s;
             }
           }
 
-          if(too_close) {
-            ref_vel -= 0.224;
-          } 
-          else if(ref_vel < 49.5) {
-            ref_vel += 0.224;
-          }
+          // Using the information on where the neightbour car is, decide on the action.
+					if(neighbour_car_ahead) {
+            // lane change left, if there isn't a neighbour car to the left
+						if(!neighbour_car_left && ego_car_lane > 0) {
+							ego_car_lane--;
+            // lane change right, if there isn't a neighbour car to the right
+						} else if(!neighbour_car_right && ego_car_lane !=2) {
+							ego_car_lane++;
+            // Slow down if there is a car ahead and cant change left or right
+						} else {
+							ref_vel -= speed_step;
+						}
+          // Speed up if there are no cars ahead
+					} else if(ref_vel < max_speed) {
+						ref_vel += speed_step;
+					}
 
-
-          json msgJson;
-
+          // The code was provided by Udacity's Tutorial, as referenced earlier.
           vector<double> ptsx;
           vector<double> ptsy;
-
 
           double ref_x = car_x;
           double ref_y = car_y;
@@ -167,9 +204,9 @@ int main() {
 
           }
 
-          vector<double> next_wp_0 = getXY(car_s + 30, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp_1 = getXY(car_s + 60, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
-          vector<double> next_wp_2 = getXY(car_s + 90, (2+4*lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp_0 = getXY(car_s + 30, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp_1 = getXY(car_s + 60, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
+          vector<double> next_wp_2 = getXY(car_s + 90, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 
           ptsx.push_back(next_wp_0[0]);
           ptsy.push_back(next_wp_0[1]);
@@ -227,6 +264,7 @@ int main() {
 
           }
 
+          json msgJson;
 
           msgJson["next_x"] = next_x_vals;
           msgJson["next_y"] = next_y_vals;
