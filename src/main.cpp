@@ -179,6 +179,8 @@ int main() {
           double ref_y = car_y;
           double ref_yaw = deg2rad(car_yaw);
 
+
+          // If the previous path size is almost empty, use the car as starting reference
           if(prev_size < 2) {
             double prev_car_x = car_x - cos(car_yaw);
             double prev_car_y = car_y - sin(car_yaw);
@@ -188,6 +190,8 @@ int main() {
 
             ptsx.push_back(car_x);
             ptsy.push_back(car_y);
+          
+          // Use the previous path's end points as starting reference 
           } else {
             ref_x = previous_path_x[prev_size - 1];
             ref_y = previous_path_y[prev_size - 1];
@@ -204,6 +208,7 @@ int main() {
 
           }
 
+          // Generate 3 waypoints 30m apart on the desired lane.
           vector<double> next_wp_0 = getXY(car_s + 30, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           vector<double> next_wp_1 = getXY(car_s + 60, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
           vector<double> next_wp_2 = getXY(car_s + 90, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
@@ -217,6 +222,7 @@ int main() {
           ptsx.push_back(next_wp_2[0]);
           ptsy.push_back(next_wp_2[1]);
 
+          // Converting to local car coordinates
           for(int i = 0; i < ptsx.size(); i++) {
             double shift_x = ptsx[i] - ref_x;
             double shift_y = ptsy[i] - ref_y;
@@ -225,13 +231,14 @@ int main() {
             ptsy[i] = (shift_x * sin(0 - ref_yaw) + shift_y * cos(0 - ref_yaw));
           }
 
+          // Spline object
           tk::spline s;
-
           s.set_points(ptsx, ptsy);
 
           vector<double> next_x_vals;
           vector<double> next_y_vals;
 
+          // Add previous path points for a smooth transition
           for(int i = 0; i < previous_path_x.size(); i++) {
             next_x_vals.push_back(previous_path_x[i]);
             next_y_vals.push_back(previous_path_y[i]);
@@ -253,6 +260,7 @@ int main() {
             double x_ref = x_point;
             double y_ref = y_point;
 
+            // Rotate it back after rotating it earlier
             x_point = (x_ref * cos(ref_yaw) - y_ref * sin(ref_yaw));
             y_point = (x_ref * sin(ref_yaw) + y_ref * cos(ref_yaw));
 

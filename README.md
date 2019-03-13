@@ -43,7 +43,7 @@ Prediction and Behaviour - Source: <https://medium.com/intro-to-artificial-intel
 	**Left lane switch** when no neighbour cars are in the left lane, and the ego car is not in the left lane.  
 	**Right lane switch** when no neighbour cars are in the right lane, and the ego car is not in the right lane.  
 	**Slow down** if can't perform either operations.  
-	**Speed up** if there are no cars ahead
+	**Speed up** if there are no cars ahead and the speed is below the max
 
 	```
 	if(neighbour_car_ahead) {
@@ -60,14 +60,14 @@ Prediction and Behaviour - Source: <https://medium.com/intro-to-artificial-intel
 	```
 2. Once the value `ego_car_lane` is changed, the rest of the code which was provided by Udacity's tutorial handles the spline formation to perform the lane change.  
 
-	Three waypoints are generated for the spline formation. Notice that the waypoints are generated based on `ego_car_lane` value.
+	Three waypoints are generated for the spline formation. Notice that the waypoints are generated based on `ego_car_lane` value. The `+2` is added so that these waypoints are at the centre of the lane.
 
 	```
 	vector<double> next_wp_0 = getXY(car_s + 30, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 	vector<double> next_wp_1 = getXY(car_s + 60, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 	vector<double> next_wp_2 = getXY(car_s + 90, (2+4*ego_car_lane), map_waypoints_s, map_waypoints_x, map_waypoints_y);
 	```
-3. Using the three waypoints, the spline is generated using the `spline.h` library.
+3. Using the three waypoints and starting points, the spline is generated using the `spline.h` library.
 
 	```
 	tk::spline s;
